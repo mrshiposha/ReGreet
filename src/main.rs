@@ -19,7 +19,7 @@ use file_rotate::{compression::Compression, suffix::AppendCount, ContentLimit, F
 use tracing_appender::{non_blocking, non_blocking::WorkerGuard};
 use tracing_subscriber::{filter::LevelFilter, fmt::time::OffsetTime};
 
-use crate::constants::{APP_ID, CONFIG_PATH, CSS_PATH, LOG_PATH};
+use crate::constants::{APP_ID, CONFIG_PATH, CSS_PATH, LOG_DIR};
 use crate::gui::{Greeter, GreeterInit};
 
 const MAX_LOG_FILES: usize = 3;
@@ -63,9 +63,19 @@ fn main() {
     });
 }
 
+fn seat() -> String {
+    std::env::var("XDG_SEAT").expect("XDG_SEAT env var must present")
+}
+
+fn log_path() -> PathBuf {
+    let log_dir = &Path::new(LOG_DIR).join(seat());
+    log_dir.join("log")
+}
+
 /// Initialize the log file with file rotation.
 fn setup_log_file() -> IoResult<FileRotate<AppendCount>> {
-    let log_path = Path::new(LOG_PATH);
+    let log_path = &log_path();
+
     if !log_path.exists() {
         if let Some(log_dir) = log_path.parent() {
             create_dir_all(log_dir)?;
@@ -118,7 +128,10 @@ fn init_logging(log_level: &LogLevel) -> WorkerGuard {
             guard
         }
         Err(err) => {
-            println!("ERROR: Couldn't create log file '{LOG_PATH}': {err}");
+            println!(
+                "ERROR: Couldn't create log file '{}': {err}",
+                log_path().display()
+            );
             let (file, guard) = non_blocking(std::io::stdout());
             logger.with_writer(file).init();
             guard

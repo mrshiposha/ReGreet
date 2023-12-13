@@ -8,13 +8,14 @@ mod lru;
 
 use std::fs::{create_dir_all, write};
 use std::num::NonZeroUsize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use self::lru::LruCache;
-use crate::constants::CACHE_PATH;
+use crate::constants::CACHE_DIR;
+use crate::seat;
 use crate::tomlutils::{load_toml, TomlFileResult};
 
 /// Limit to the size of the user to last-used session mapping.
@@ -41,7 +42,7 @@ impl Default for Cache {
 impl Cache {
     /// Load the cache file from disk.
     pub fn new() -> Self {
-        let mut cache: Self = load_toml(CACHE_PATH);
+        let mut cache: Self = load_toml(&Self::path());
         // Make sure that the LRU can contain the needed amount of mappings.
         cache
             .user_to_last_sess
@@ -49,9 +50,14 @@ impl Cache {
         cache
     }
 
+    fn path() -> PathBuf {
+        let cache_dir = &Path::new(CACHE_DIR).join(seat());
+        cache_dir.join("cache.toml")
+    }
+
     /// Save the cache file to disk.
     pub fn save(&self) -> TomlFileResult<()> {
-        let cache_path = Path::new(CACHE_PATH);
+        let cache_path = &Self::path();
         if !cache_path.exists() {
             // Create the cache directory.
             if let Some(cache_dir) = cache_path.parent() {
