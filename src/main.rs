@@ -22,7 +22,7 @@ use tracing_subscriber::{
     filter::LevelFilter, fmt::layer, fmt::time::OffsetTime, layer::SubscriberExt,
 };
 
-use crate::constants::{APP_ID, CONFIG_PATH, CSS_PATH, LOG_PATH};
+use crate::constants::{APP_ID, CONFIG_PATH, CSS_PATH, LOG_DIR};
 use crate::gui::{Greeter, GreeterInit};
 
 #[macro_use]
@@ -53,8 +53,8 @@ enum LogLevel {
 #[command(author, version, about)]
 struct Args {
     /// The path to the log file
-    #[arg(short = 'l', long, value_name = "PATH", default_value = LOG_PATH)]
-    logs: PathBuf,
+    #[arg(short = 'l', long, value_name = "PATH")]
+    logs: Option<PathBuf>,
 
     /// The verbosity level of the logs
     #[arg(short = 'L', long, value_name = "LEVEL", default_value = "info")]
@@ -79,8 +79,10 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+    let logs = args.logs.unwrap_or_else(default_log_path);
+
     // Keep the guard alive till the end of the function, since logging depends on this.
-    let _guard = init_logging(&args.logs, &args.log_level, args.verbose);
+    let _guard = init_logging(&logs, &args.log_level, args.verbose);
 
     let app = relm4::RelmApp::new(APP_ID);
     app.with_args(vec![]).run_async::<Greeter>(GreeterInit {
@@ -88,6 +90,15 @@ fn main() {
         css_path: args.style,
         demo: args.demo,
     });
+}
+
+fn seat() -> String {
+    std::env::var("XDG_SEAT").expect("XDG_SEAT env var must present")
+}
+
+fn default_log_path() -> PathBuf {
+    let log_dir = &Path::new(LOG_DIR).join(seat());
+    log_dir.join("log")
 }
 
 /// Initialize the log file with file rotation.
@@ -165,7 +176,11 @@ fn init_logging(log_path: &Path, log_level: &LogLevel, stdout: bool) -> Vec<Work
             let (file, guard) = non_blocking(std::io::stdout());
             guards.push(guard);
             builder.with_writer(file).init();
-            tracing::error!("Couldn't create log file '{LOG_PATH}': {file_err}");
+            tracing::error!(
+                "Couldn't create log file '{}': {}",
+                log_path.display(),
+                file_err
+            );
         }
     };
 
